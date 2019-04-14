@@ -9,17 +9,17 @@ import (
 
 func main() {
 	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:9090",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-		// ReadTimeout: 5 * time.Second,
-		// PoolSize: 5,
+		Addr:        "localhost:9090",
+		Password:    "", // no password set
+		DB:          0,  // use default DB
+		ReadTimeout: 5 * time.Second,
+		PoolSize:    40,
 	})
 
 RETRY:
 	count := 0
 	for i := 1; i <= 100; i++ {
-		if i%40 == 0 {
+		if i%70 == 0 {
 			time.Sleep(1 * time.Second)
 		}
 		go func(i int) {

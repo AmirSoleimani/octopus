@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/quizofkings/octopus/config"
+	octop "github.com/quizofkings/octopus/octopool"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,7 +21,7 @@ type NetCommands interface {
 
 //ClusterPool struct
 type ClusterPool struct {
-	conns  map[string]Pool // addr => pool
+	conns  map[string]*octop.OctoPool // addr => pool
 	reconn chan net.Conn
 }
 
@@ -36,7 +37,7 @@ func New() NetCommands {
 	logrus.Infoln("create node(s) connection")
 
 	var clusterPoolMap = ClusterPool{
-		conns:  map[string]Pool{},
+		conns:  map[string]*octop.OctoPool{},
 		reconn: make(chan net.Conn),
 	}
 
@@ -47,24 +48,7 @@ func New() NetCommands {
 		}
 	}
 
-	// reconnect channel
-	go clusterPoolMap.reconnectHandler()
-
 	return &clusterPoolMap
-}
-
-//reconnectHandler reconnect handler
-func (c *ClusterPool) reconnectHandler() {
-	for {
-		select {
-		case conn := <-c.reconn:
-			var err error
-			conn, err = net.Dial("tcp", conn.RemoteAddr().String())
-			if err != nil {
-				logrus.Errorln(err)
-			}
-		}
-	}
 }
 
 //AddNode add new node when redis ASK/MOVED/initialize
@@ -75,7 +59,7 @@ func (c *ClusterPool) AddNode(node string) error {
 		return nil
 	}
 
-	p, err := NewChannelPool(config.Reader.Pool.InitCap, config.Reader.Pool.MaxCap, func() (net.Conn, error) {
+	p, err := octop.NewOctoPool(config.Reader.Pool.InitCap, config.Reader.Pool.MaxCap, func() (net.Conn, error) {
 		logrus.Infof("create new connection, remoteAddr:%s", node)
 		return net.Dial("tcp", node)
 	})
@@ -108,31 +92,24 @@ func (c *ClusterPool) writeAction(nodeAddr string, msg []byte) ([]byte, error) {
 
 	// get node from octopool ^-^
 	octoPool := c.conns[nodeAddr]
-	conn, err := octoPool.Get()
-	defer conn.Close()
+	peer, err := octoPool.Get()
 	if err != nil {
 		return nil, err
 	}
+	defer octoPool.Put(peer)
 
-	node := newNode(conn)
-	defer node.Close()
-	node.outgoing <- msg
-
-	// reader := respreader.NewReader(conn)
-	// recChan := make(chan []byte)
-	// go func() {
-	// 	for {
-	// 		msg, err := reader.ReadObject()
-	// 		if err == io.EOF {
-	// 			break
-	// 		}
-	// 		recChan <- msg
-	// 	}
-	// }()
-
-	bufNode = <-node.incoming
-
-	// bufNode = <-node.incoming //[]byte("+PONG\n") //<-recChan
+	// write to peer
+	peer.Outgoing <- msg
+	for {
+		select {
+		case bufNode = <-peer.Incoming:
+			break
+		case err := <-peer.Disc:
+			peer.Close()
+			return nil, err
+		}
+		break
+	}
 
 	// check moved or ask
 	moved, ask, addr := redisHasMovedError(bufNode)
