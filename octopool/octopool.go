@@ -9,7 +9,7 @@ import (
 
 //OctoPool struct
 type OctoPool struct {
-	RW    sync.RWMutex
+	sync.RWMutex
 	Queue chan *Peer
 
 	InitCap int
@@ -29,7 +29,6 @@ func NewOctoPool(initCap, maxCap int, factory Factory) (*OctoPool, error) {
 		Queue:   make(chan *Peer, maxCap),
 		InitCap: initCap,
 		MaxCap:  maxCap,
-		RW:      sync.RWMutex{},
 		Factory: factory,
 	}
 
@@ -63,8 +62,8 @@ func (o *OctoPool) createPeer() (*Peer, error) {
 func (o *OctoPool) Get() (*Peer, error) {
 
 	// rw lock
-	o.RW.Lock()
-	defer o.RW.Unlock()
+	o.RLock()
+	defer o.RUnlock()
 
 	select {
 	case p := <-o.Queue:
@@ -87,8 +86,8 @@ func (o *OctoPool) Put(p *Peer) error {
 	}
 
 	// rw lock
-	o.RW.Lock()
-	defer o.RW.Unlock()
+	o.Lock()
+	defer o.Unlock()
 
 	select {
 	case o.Queue <- p:

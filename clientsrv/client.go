@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/quizofkings/octopus/config"
 	"github.com/quizofkings/octopus/respreader"
@@ -14,6 +15,7 @@ import (
 )
 
 type client struct {
+	mu       sync.RWMutex
 	uniqueID string
 	incoming chan []byte
 	outgoing chan []byte

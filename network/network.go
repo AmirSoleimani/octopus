@@ -2,8 +2,10 @@ package network
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 	"net"
+	"time"
 
 	"github.com/quizofkings/octopus/config"
 	octop "github.com/quizofkings/octopus/octopool"
@@ -87,6 +89,16 @@ func (c *ClusterPool) Write(clusterIndex int, msg []byte) ([]byte, error) {
 
 func (c *ClusterPool) writeAction(nodeAddr string, msg []byte) ([]byte, error) {
 
+	// handle close channel
+	defer func() {
+		// recover from panic caused by writing to a closed channel
+		if r := recover(); r != nil {
+			err := fmt.Errorf("%v", r)
+			logrus.Warnf("write-peer: error writing on channel: %v", err)
+			return
+		}
+	}()
+
 	// variable
 	bufNode := []byte{}
 
@@ -96,9 +108,9 @@ func (c *ClusterPool) writeAction(nodeAddr string, msg []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer octoPool.Put(peer)
 
 	// write to peer
+	start := time.Now().Unix()
 	peer.Outgoing <- msg
 	for {
 		select {
@@ -110,6 +122,14 @@ func (c *ClusterPool) writeAction(nodeAddr string, msg []byte) ([]byte, error) {
 		}
 		break
 	}
+	end := time.Now().Unix()
+	diff := end - start
+	if diff >= 1 {
+		logrus.WithField("diff", diff).Infoln("LATENCY")
+	}
+
+	// put back to pool (notdefer)
+	octoPool.Put(peer)
 
 	// check moved or ask
 	moved, ask, addr := redisHasMovedError(bufNode)

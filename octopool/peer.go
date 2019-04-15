@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/quizofkings/octopus/respreader"
+	"github.com/quizofkings/octopus/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -12,6 +13,7 @@ import (
 type Peer struct {
 	net.Conn
 
+	Tag      string
 	Incoming chan []byte
 	Outgoing chan []byte
 	Disc     chan error
@@ -30,6 +32,7 @@ func NewPeer(conn net.Conn) *Peer {
 	// create peer struct
 	p := &Peer{
 		Conn:     conn,
+		Tag:      utils.RandStringRunes(15),
 		Incoming: make(chan []byte),
 		Outgoing: make(chan []byte),
 		Disc:     make(chan error),
@@ -42,15 +45,23 @@ func NewPeer(conn net.Conn) *Peer {
 
 //Start start reader and writer
 func (p *Peer) Start() {
+
+	defer func() {
+		p.Disc <- ErrClosed
+	}()
+
 	go p.Reader()
 	p.Writer()
 }
 
 // Close peer
 func (p *Peer) Close() error {
-	logrus.Errorln("close peer")
+
+	// close channels
 	close(p.Incoming)
 	close(p.Outgoing)
+
+	// close net.Conn
 	p.Conn.Close()
 
 	return nil
@@ -66,6 +77,17 @@ func (p *Peer) Reader() {
 		}
 		p.Incoming <- msg
 	}
+	// for {
+	// 	message := make([]byte, 4096)
+	// 	length, err := p.Conn.Read(message)
+	// 	if err != nil {
+	// 		p.Disc <- err
+	// 		break
+	// 	}
+	// 	if length > 0 {
+	// 		p.Incoming <- message[:length]
+	// 	}
+	// }
 }
 
 //Writer writer
