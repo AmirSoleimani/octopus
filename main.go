@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 
 	"github.com/quizofkings/octopus/clientsrv"
 	"github.com/quizofkings/octopus/config"
@@ -20,6 +21,9 @@ var rootCmd = &cobra.Command{
 	Use:   "gate",
 	Short: "Octopus Gate",
 	Run: func(cmd *cobra.Command, args []string) {
+
+		// cpu core info
+		logrus.Infof("current GOMAXPROCS is :%d , maxNumCPU:%d\n", runtime.GOMAXPROCS(0), runtime.NumCPU())
 
 		// load config
 		config.Load(&config.Opt{
